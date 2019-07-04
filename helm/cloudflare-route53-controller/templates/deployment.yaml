@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-route53-controller
+spec:
+  selector:
+    matchLabels:
+      name: cloudflare-route53-controller
+  template:
+    metadata:
+      labels:
+        name: cloudflare-route53-controller
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: cloudflare-route53-controller
+          image: "patoarvizu/cloudflare-route53-controller:{{ .Values.imageVersion }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command:
+          - /cloudflare-route53-controller
+          - -hosted-zone-id={{ required "Hosted zone id is required!" .Values.aws.route53.hostedZoneId }}
+          - -cloudflare-zone-name={{ required "Cloudflare zone name is required!" .Values.cloudflare.cloudflareZoneName }}
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aws.accessKeyId.secretName }}
+                  key: {{ .Values.aws.accessKeyId.secretKey }}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aws.secretAccessKey.secretName }}
+                  key: {{ .Values.aws.secretAccessKey.secretKey }}
+            - name: AWS_REGION
+              value: {{ .Values.aws.region }}
+            - name: CLOUDFLARE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cloudflare.token.secretName }}
+                  key: {{ .Values.cloudflare.token.secretKey }}
+            - name: CLOUDFLARE_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.cloudflare.email.configName }}
+                  key: {{ .Values.cloudflare.email.configKey }}

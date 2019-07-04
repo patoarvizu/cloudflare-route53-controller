@@ -1,0 +1,26 @@
+imageVersion: latest
+imagePullPolicy: Always
+
+serviceAccount:
+  name: cloudflare-route53-operator
+  create: true
+
+aws:
+  route53:
+    hostedZoneId: null
+  accessKeyId:
+    secretName: cloudflare-route53-controller-secrets
+    secretKey: AWS_ACCESS_KEY_ID
+  secretAccessKey:
+    secretName: cloudflare-route53-controller-secrets
+    secretKey: AWS_SECRET_ACCESS_KEY
+  region: us-east-1
+
+cloudflare:
+  cloudflareZoneName: null
+  token:
+    secretName: cloudflare-route53-controller-secrets
+    secretKey: CLOUDFLARE_TOKEN
+  email:
+    configName: cloudflare-route53-controller-config
+    configKey: CLOUDFLARE_EMAIL
