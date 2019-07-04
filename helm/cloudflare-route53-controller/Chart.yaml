@@ -1,0 +1,4 @@
+apiVersion: v1
+description: KMS Vault operator
+name: cloudflare-route53-operator
+version: 0.0.1
