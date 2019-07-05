@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,14 +30,15 @@ import (
 const controllerAgentName = "cloudflare-route53-controller"
 
 type Controller struct {
-	kubeclientset      kubernetes.Interface
-	workqueue          workqueue.RateLimitingInterface
-	recorder           record.EventRecorder
-	ingressLister      ingresslisters.IngressLister
-	ingressSynced      cache.InformerSynced
-	annotationPrefix   string
-	hostedZoneId       string
-	cloudflareZoneName string
+	kubeclientset                   kubernetes.Interface
+	workqueue                       workqueue.RateLimitingInterface
+	recorder                        record.EventRecorder
+	ingressLister                   ingresslisters.IngressLister
+	ingressSynced                   cache.InformerSynced
+	annotationPrefix                string
+	hostedZoneId                    string
+	cloudflareZoneName              string
+	enableAdditionalHostsAnnotation bool
 }
 
 func NewController(
@@ -44,21 +46,23 @@ func NewController(
 	ingressInformer ingressinformers.IngressInformer,
 	annotationPrefix string,
 	hostedZoneId string,
-	cloudflareZoneName string) *Controller {
+	cloudflareZoneName string,
+	enableAdditionalHostsAnnotation bool) *Controller {
 
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 	controller := &Controller{
-		kubeclientset:      kubeclientset,
-		workqueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Queue"),
-		recorder:           recorder,
-		ingressLister:      ingressInformer.Lister(),
-		ingressSynced:      ingressInformer.Informer().HasSynced,
-		annotationPrefix:   annotationPrefix,
-		hostedZoneId:       hostedZoneId,
-		cloudflareZoneName: cloudflareZoneName,
+		kubeclientset:                   kubeclientset,
+		workqueue:                       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Queue"),
+		recorder:                        recorder,
+		ingressLister:                   ingressInformer.Lister(),
+		ingressSynced:                   ingressInformer.Informer().HasSynced,
+		annotationPrefix:                annotationPrefix,
+		hostedZoneId:                    hostedZoneId,
+		cloudflareZoneName:              cloudflareZoneName,
+		enableAdditionalHostsAnnotation: enableAdditionalHostsAnnotation,
 	}
 
 	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -125,11 +129,11 @@ func (c *Controller) processIngress(obj interface{}) error {
 		return fmt.Errorf("Error: %v", err)
 	}
 
-	if v, ok := ingress.Annotations[fmt.Sprintf("%s/cloudflare-record", annotationPrefix)]; ok {
-		klog.Info(v)
+	if cfr, ok := ingress.Annotations[fmt.Sprintf("%s/cloudflare-record", annotationPrefix)]; ok {
+		klog.Info(fmt.Sprintf("Adding DNS for %s", cfr))
 		if d, ok := ingress.Annotations["dns.alpha.kubernetes.io/external"]; ok {
-			if v == d {
-				klog.Info(fmt.Sprintf("Origin and Cloudflare record are the same (%s), skipping.", v))
+			if cfr == d {
+				klog.Info(fmt.Sprintf("Origin and Cloudflare record are the same (%s), skipping.", cfr))
 				return nil
 			}
 
@@ -142,29 +146,63 @@ func (c *Controller) processIngress(obj interface{}) error {
 				return fmt.Errorf("Error: %v", err)
 			}
 
+			hostsChanges := []*route53.Change{}
+			hostsChanges = append(hostsChanges, &route53.Change{
+				Action: aws.String(route53.ChangeActionUpsert),
+				ResourceRecordSet: &route53.ResourceRecordSet{
+					Name: aws.String(cfr),
+					ResourceRecords: []*route53.ResourceRecord{
+						&route53.ResourceRecord{
+							Value: aws.String(fmt.Sprintf("%s.cdn.cloudflare.net", cfr)),
+						},
+					},
+					TTL:  aws.Int64(60),
+					Type: aws.String(route53.RRTypeCname),
+				},
+			})
+
+			var addHostsAnnotation bool
+			if s, ok := ingress.Annotations[fmt.Sprintf("%s/add-rules-hosts", annotationPrefix)]; ok {
+				addHostsAnnotation, err = strconv.ParseBool(s)
+				if err != nil {
+					addHostsAnnotation = false
+				}
+			}
+
+			if enableAdditionalHostsAnnotation && addHostsAnnotation {
+				for _, rules := range ingress.Spec.Rules {
+					hostsChanges = append(hostsChanges, &route53.Change{
+						Action: aws.String(route53.ChangeActionUpsert),
+						ResourceRecordSet: &route53.ResourceRecordSet{
+							Name: aws.String(rules.Host),
+							ResourceRecords: []*route53.ResourceRecord{
+								&route53.ResourceRecord{
+									Value: aws.String(fmt.Sprintf("%s.cdn.cloudflare.net", rules.Host)),
+								},
+							},
+							TTL:  aws.Int64(60),
+							Type: aws.String(route53.RRTypeCname),
+						},
+					})
+				}
+			}
+
 			awsSession := session.Must(session.NewSession())
 			r53 := route53.New(awsSession)
 			r53.ChangeResourceRecordSets(&route53.ChangeResourceRecordSetsInput{
 				HostedZoneId: aws.String(hostedZoneId),
 				ChangeBatch: &route53.ChangeBatch{
-					Changes: []*route53.Change{
-						&route53.Change{
-							Action: aws.String(route53.ChangeActionUpsert),
-							ResourceRecordSet: &route53.ResourceRecordSet{
-								Name: aws.String(v),
-								ResourceRecords: []*route53.ResourceRecord{
-									&route53.ResourceRecord{
-										Value: aws.String(fmt.Sprintf("%s.cdn.cloudflare.net", v)),
-									},
-								},
-								TTL:  aws.Int64(60),
-								Type: aws.String(route53.RRTypeCname),
-							},
-						},
-					},
-				}})
-			cf.CreateDNSRecord(zoneId, cloudflare.DNSRecord{Type: "CNAME", Name: v, Content: d, Proxied: true, TTL: 1})
+					Changes: hostsChanges,
+				},
+			})
+
+			cf.CreateDNSRecord(zoneId, cloudflare.DNSRecord{Type: "CNAME", Name: cfr, Content: d, Proxied: true, TTL: 1})
 			c.recorder.Event(ingress, corev1.EventTypeNormal, "Synced", "Cloudflare and Route53 records have been synced.")
+			if enableAdditionalHostsAnnotation && addHostsAnnotation {
+				for _, rules := range ingress.Spec.Rules {
+					cf.CreateDNSRecord(zoneId, cloudflare.DNSRecord{Type: "CNAME", Name: rules.Host, Content: d, Proxied: true, TTL: 1})
+				}
+			}
 		}
 	}
 

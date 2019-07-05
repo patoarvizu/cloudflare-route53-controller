@@ -15,11 +15,12 @@ import (
 )
 
 var (
-	masterURL          string
-	kubeconfig         string
-	annotationPrefix   string
-	hostedZoneId       string
-	cloudflareZoneName string
+	masterURL                       string
+	kubeconfig                      string
+	annotationPrefix                string
+	hostedZoneId                    string
+	cloudflareZoneName              string
+	enableAdditionalHostsAnnotation bool
 )
 
 func setupSignalHandler() (stopCh <-chan struct{}) {
@@ -60,6 +61,7 @@ func main() {
 		annotationPrefix,
 		hostedZoneId,
 		cloudflareZoneName,
+		enableAdditionalHostsAnnotation,
 	)
 
 	kubeInformerFactory.Start(stopCh)
@@ -75,4 +77,5 @@ func init() {
 	flag.StringVar(&annotationPrefix, "annotation-prefix", "cloudflare.patoarvizu.dev", "The prefix to be used for discovery of managed ingresses.")
 	flag.StringVar(&hostedZoneId, "hosted-zone-id", "", "The id of the Route53 hosted zone to be managed.")
 	flag.StringVar(&cloudflareZoneName, "cloudflare-zone-name", "", "The name of the Cloudflare zone to be managed.")
+	flag.BoolVar(&enableAdditionalHostsAnnotation, "enable-additional-hosts-annotations", false, "Enable flag that allows creating additional records for heach 'Host' in the ingress rules.")
 }
