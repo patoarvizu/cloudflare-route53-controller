@@ -23,6 +23,7 @@ spec:
           - -cloudflare-zone-name={{ required "Cloudflare zone name is required!" .Values.cloudflare.cloudflareZoneName }}
           - -enable-additional-hosts-annotations={{ .Values.enableAdditionalHostsAnnotations }}
           env:
+            {{- if .Values.aws.withCredentials }}
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -33,6 +34,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.aws.secretAccessKey.secretName }}
                   key: {{ .Values.aws.secretAccessKey.secretKey }}
+            {{- end }}
             - name: AWS_REGION
               value: {{ .Values.aws.region }}
             - name: CLOUDFLARE_TOKEN

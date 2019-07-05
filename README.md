@@ -79,6 +79,8 @@ The controller uses the default [credential precedence order](https://docs.aws.a
 
 A [Helm](https://helm.sh/) chart is provided in the `helm/cloudflare-route53-controller` directory. This chart depends on two manifests not included in it: a `Secret` (called `cloudflare-route53-controller-secrets` by default) where the `Deployment` can find the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `CLOUDFLARE_TOKEN` secrets, as well as a `ConfigMap` (called `cloudflare-route53-controller-config` by default), where the `Deployment` can find the `CLOUDFLARE_EMAIL` variable.
 
+Optionally, if the controller is already running on an environment where it can auto-discover its AWS access keys, e.g. on a node with an instance role that would provide the credentials via the local metadata endpoint, or injected dynamically via [vaultenv](https://github.com/channable/vaultenv), you can set the `aws.withCredentials` value to `false`, and Helm won't render the corresponding environment variables.
+
 ## Important notes about this project
 
 ### The controller doesn't handle deletions
