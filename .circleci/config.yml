@@ -9,9 +9,16 @@ jobs:
       - checkout
       - setup_remote_docker
       - run:
-          name: Build image
+          name: Build and push image
           command: |
-            docker build -f docker/Dockerfile -t patoarvizu/cloudflare-route53-controller:latest .
+            echo $DOCKER_HUB_KEY | docker login -u $DOCKER_HUB_USER --password-stdin
+            docker build -f docker/Dockerfile -t patoarvizu/cloudflare-route53-controller:$CIRCLE_SHA1 .
+            VERSION=${CIRCLE_TAG:-latest}
+            docker tag patoarvizu/cloudflare-route53-controller:$CIRCLE_SHA1 patoarvizu/cloudflare-route53-controller:latest
+            docker tag patoarvizu/cloudflare-route53-controller:$CIRCLE_SHA1 patoarvizu/cloudflare-route53-controller:$VERSION
+            docker push patoarvizu/cloudflare-route53-controller:$CIRCLE_SHA1
+            docker push patoarvizu/cloudflare-route53-controller:$VERSION
+            docker push patoarvizu/cloudflare-route53-controller:latest
 
 workflows:
   version: 2
