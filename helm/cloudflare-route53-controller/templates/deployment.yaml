@@ -18,8 +18,10 @@ spec:
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
           - /cloudflare-route53-controller
-          - -hosted-zone-id={{ required "Hosted zone id is required!" .Values.aws.route53.hostedZoneId }}
-          - -cloudflare-zone-name={{ required "Cloudflare zone name is required!" .Values.cloudflare.cloudflareZoneName }}
+          - -annotation-prefix {{ .Values.annotationPrefix }}
+          - -hosted-zone-id {{ required "Hosted zone id is required!" .Values.aws.route53.hostedZoneId }}
+          - -cloudflare-zone-name {{ required "Cloudflare zone name is required!" .Values.cloudflare.cloudflareZoneName }}
+          - -enable-additional-hosts-annotations {{ .Values.enableAdditionalHostsAnnotations }}
           env:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:

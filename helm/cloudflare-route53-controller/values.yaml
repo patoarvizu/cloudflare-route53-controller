@@ -1,5 +1,7 @@
 imageVersion: latest
 imagePullPolicy: Always
+annotationPrefix: cloudflare.patoarvizu.dev
+enableAdditionalHostsAnnotations: false
 
 serviceAccount:
   name: cloudflare-route53-operator
