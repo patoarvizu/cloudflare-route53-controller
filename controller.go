@@ -130,6 +130,7 @@ func (c *Controller) processIngress(obj interface{}) error {
 		if d, ok := ingress.Annotations["dns.alpha.kubernetes.io/external"]; ok {
 			if v == d {
 				klog.Info(fmt.Sprintf("Origin and Cloudflare record are the same (%s), skipping.", v))
+				return nil
 			}
 
 			cf, err := cloudflare.New(os.Getenv("CLOUDFLARE_TOKEN"), os.Getenv("CLOUDFLARE_EMAIL"))
