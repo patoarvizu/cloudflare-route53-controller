@@ -1,0 +1,23 @@
+version: 2.1
+
+jobs:
+  build:
+    working_directory: /home/circleci/go/src/github.com/patoarvizu/cloudflare-route53-controller
+    docker:
+      - image: docker:18.09-git
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build image
+          command: |
+            docker build -f docker/Dockerfile -t patoarvizu/cloudflare-route53-controller:latest .
+
+workflows:
+  version: 2
+  build-controller:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /^v\d+\.\d+.\d+$/
