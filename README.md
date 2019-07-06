@@ -4,6 +4,8 @@
 
 - [Cloudflare-Route 53 controller](#cloudflare-route-53-controller)
     - [Intro](#intro)
+    - [Motivation (with a warning)](#motivation-with-a-warning)
+        - [The warning](#the-warning)
     - [Description](#description)
     - [Configuration](#configuration)
         - [Cloudflare authentication](#cloudflare-authentication)
@@ -25,6 +27,14 @@ When running a Kubernetes `Ingress` to expose your services, it's fairly trivial
 Since both Cloudflare and Route 53 have programmatic APIs, it wouldn't be too hard to define in code with Terraform for example (via its [Cloudflare](https://www.terraform.io/docs/providers/cloudflare/index.html) and [AWS](https://www.terraform.io/docs/providers/aws/index.html) providers). But the problem with this approach is that in the absence of any automation, it's not very helpful when one tries to move quickly. Even with a pipeline, we have the additional problem of coupling two things together that live in different ecosystems, and more likely than not, even different repositories.
 
 It's also possible to use one of the many SDKs for either provider and write a script to automate the task, but there's still a disconnect between the API logic, and the discovery logic. In other words, writing a parameterized script or library to write two DNS records is easy, but discovering what those two values should be, is not that simple. You need a way for such script to run continuously, close to the dynamic source (the `Ingress`es) to handle discovery, is able to handle authentication, can be deployed like your other services and can react to changes quickly, and provides high availability. Clearly, the best option based on the context of the problem is to run it in Kubernetes.
+
+## Motivation (with a warning)
+
+The motivation for writing this controller comes after the events of two Cloudflare outages within 10 days (on [06/24/2019](https://blog.cloudflare.com/how-verizon-and-a-bgp-optimizer-knocked-large-parts-of-the-internet-offline-today/) and [07/02/2019](https://blog.cloudflare.com/cloudflare-outage/)). Not being able to restore service to downstream consumers when upstream vendors fail can be costly, and part of the goals of this controller is to help minimize disruptions in an automated way.
+
+### The warning
+
+If you have Cloudflare as part of your setup, it's very likely because of the security features it provides. Because of that, bypassing Cloudflare to direct traffic directly to your origin in case of an outage should not be your first mitigation action. This can make your systems immediately vulnerable and make the cost of continuous operation more costly than the service interruption, which depending on your environment, can have financial or legal repercussions. This controller can be used to make such move very easily, but it's not its explicit goal. Always make changes carefully and make sure you weigh the pros and cons of any emergency action.
 
 ## Description
 
