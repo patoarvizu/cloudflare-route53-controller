@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -130,7 +131,6 @@ func (c *Controller) processIngress(obj interface{}) error {
 	}
 
 	if cfr, ok := ingress.Annotations[fmt.Sprintf("%s/cloudflare-record", annotationPrefix)]; ok {
-		klog.Info(fmt.Sprintf("Adding DNS for %s", cfr))
 		if d, ok := ingress.Annotations["dns.alpha.kubernetes.io/external"]; ok {
 			if cfr == d {
 				klog.Info(fmt.Sprintf("Origin and Cloudflare record are the same (%s), skipping.", cfr))
@@ -146,45 +146,51 @@ func (c *Controller) processIngress(obj interface{}) error {
 				return fmt.Errorf("Error: %v", err)
 			}
 
-			hostsChanges := []*route53.Change{}
-			hostsChanges = append(hostsChanges, &route53.Change{
-				Action: aws.String(route53.ChangeActionUpsert),
-				ResourceRecordSet: &route53.ResourceRecordSet{
-					Name: aws.String(cfr),
-					ResourceRecords: []*route53.ResourceRecord{
-						&route53.ResourceRecord{
-							Value: aws.String(fmt.Sprintf("%s.cdn.cloudflare.net", cfr)),
-						},
-					},
-					TTL:  aws.Int64(60),
-					Type: aws.String(route53.RRTypeCname),
-				},
-			})
+			records := []string{cfr}
 
-			var addHostsAnnotation bool
-			if s, ok := ingress.Annotations[fmt.Sprintf("%s/add-rules-hosts", annotationPrefix)]; ok {
-				addHostsAnnotation, err = strconv.ParseBool(s)
-				if err != nil {
-					addHostsAnnotation = false
-				}
+			addHostsAnnotation := false
+			if h, ok := ingress.Annotations[fmt.Sprintf("%s/add-rules-hosts", annotationPrefix)]; ok {
+				addHostsAnnotation, _ = strconv.ParseBool(h)
+			}
+
+			addAliasesAnnotation := false
+			if a, ok := ingress.Annotations[fmt.Sprintf("%s/add-aliases", annotationPrefix)]; ok {
+				addAliasesAnnotation, _ = strconv.ParseBool(a)
+			}
+
+			aliases := []string{}
+			if aliasesAnnotation, ok := ingress.Annotations["ingress.kubernetes.io/server-alias"]; ok {
+				aliases = strings.Fields(aliasesAnnotation)
 			}
 
 			if enableAdditionalHostsAnnotation && addHostsAnnotation {
 				for _, rules := range ingress.Spec.Rules {
-					hostsChanges = append(hostsChanges, &route53.Change{
-						Action: aws.String(route53.ChangeActionUpsert),
-						ResourceRecordSet: &route53.ResourceRecordSet{
-							Name: aws.String(rules.Host),
-							ResourceRecords: []*route53.ResourceRecord{
-								&route53.ResourceRecord{
-									Value: aws.String(fmt.Sprintf("%s.cdn.cloudflare.net", rules.Host)),
-								},
-							},
-							TTL:  aws.Int64(60),
-							Type: aws.String(route53.RRTypeCname),
-						},
-					})
+					records = append(records, rules.Host)
 				}
+			}
+
+			if enableAdditionalHostsAnnotation && addAliasesAnnotation {
+				for _, alias := range aliases {
+					records = append(records, alias)
+				}
+			}
+
+			uniqueHosts := removeDuplicates(records)
+			hostsChanges := []*route53.Change{}
+			for _, record := range uniqueHosts {
+				hostsChanges = append(hostsChanges, &route53.Change{
+					Action: aws.String(route53.ChangeActionUpsert),
+					ResourceRecordSet: &route53.ResourceRecordSet{
+						Name: aws.String(record),
+						ResourceRecords: []*route53.ResourceRecord{
+							&route53.ResourceRecord{
+								Value: aws.String(fmt.Sprintf("%s.cdn.cloudflare.net", record)),
+							},
+						},
+						TTL:  aws.Int64(60),
+						Type: aws.String(route53.RRTypeCname),
+					},
+				})
 			}
 
 			awsSession := session.Must(session.NewSession())
@@ -196,17 +202,27 @@ func (c *Controller) processIngress(obj interface{}) error {
 				},
 			})
 
-			cf.CreateDNSRecord(zoneId, cloudflare.DNSRecord{Type: "CNAME", Name: cfr, Content: d, Proxied: true, TTL: 1})
-			c.recorder.Event(ingress, corev1.EventTypeNormal, "Synced", "Cloudflare and Route53 records have been synced.")
-			if enableAdditionalHostsAnnotation && addHostsAnnotation {
-				for _, rules := range ingress.Spec.Rules {
-					cf.CreateDNSRecord(zoneId, cloudflare.DNSRecord{Type: "CNAME", Name: rules.Host, Content: d, Proxied: true, TTL: 1})
-				}
+			for _, record := range uniqueHosts {
+				cf.CreateDNSRecord(zoneId, cloudflare.DNSRecord{Type: "CNAME", Name: record, Content: d, Proxied: true, TTL: 1})
 			}
+
+			c.recorder.Event(ingress, corev1.EventTypeNormal, "Synced", "Cloudflare and Route53 records have been synced.")
 		}
 	}
 
 	return nil
+}
+
+func removeDuplicates(hosts []string) []string {
+	found := map[string]bool{}
+	result := []string{}
+	for _, h := range hosts {
+		if !found[h] {
+			found[h] = true
+			result = append(result, h)
+		}
+	}
+	return result
 }
 
 func (c *Controller) enqueueIngress(obj interface{}) {
@@ -216,6 +232,5 @@ func (c *Controller) enqueueIngress(obj interface{}) {
 		utilruntime.HandleError(err)
 		return
 	}
-	klog.Info("Queued ingress ", key)
 	c.workqueue.AddRateLimited(key)
 }
