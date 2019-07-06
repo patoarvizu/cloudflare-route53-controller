@@ -1,5 +1,7 @@
 # Cloudflare-Route 53 controller
 
+![CircleCI](https://img.shields.io/circleci/build/github/patoarvizu/cloudflare-route53-controller.svg?label=CircleCI) ![GitHub tag (latest SemVer)](https://img.shields.io/github/tag/patoarvizu/cloudflare-route53-controller.svg) ![Docker Pulls](https://img.shields.io/docker/pulls/patoarvizu/cloudflare-route53-controller.svg) ![Keybase BTC](https://img.shields.io/keybase/btc/patoarvizu.svg) ![Keybase PGP](https://img.shields.io/keybase/pgp/patoarvizu.svg) ![GitHub](https://img.shields.io/github/license/patoarvizu/cloudflare-route53-controller.svg)
+
 <!-- TOC -->
 
 - [Cloudflare-Route 53 controller](#cloudflare-route-53-controller)
