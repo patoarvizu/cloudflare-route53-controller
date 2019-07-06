@@ -73,7 +73,9 @@ spec:
 
 The controller will create the record indicated by the `cloudflare.patoarvizu.dev/cloudflare-record`, and additionally, it will create another `CNAME host1.patoarvizu.dev` pointing to `host1.patoarvizu.dev.cdn.cloudflare.net`, and the corresponding one pointing from Cloudflare to `example-origin.patoarvizu.dev`.
 
-Just keep in mind that the `-enable-additional-hosts-annotations` flag enables the annotation across all `Ingress`es but **doesn't** enforce it, while the `*/add-rules-hosts` annotation can be applied selectively to a subset of them.
+Similarly, you can have the controller create additional records based on an existing `ingress.kubernetes.io/server-alias` annotation. If you add the `cloudflare.patoarvizu.dev/add-aliases` annotation, the controller will create a new set of records for each alias.
+
+Just keep in mind that the `-enable-additional-hosts-annotations` flag enables the annotation across all `Ingress`es but **doesn't** enforce it, while the `cloudflare.patoarvizu.dev/add-rules-hosts` or `cloudflare.patoarvizu.dev/add-aliases` annotations can be applied selectively to a subset of them.
 
 ## Configuration
 
@@ -99,7 +101,7 @@ Optionally, if the controller is already running on an environment where it can 
 
 Since this controller is stateless, it's not aware of what operations have been done in the past. Because of that it can't tell if the absence of an annotation (or a whole `Ingress`) means it was removed and it needs to delete de associated records, or if it never existed in the first place. To keep the controller logic stateless and as simple as possible, deletions are outside of its scope.
 
-**This means that if the controller may permanently overwrite records managed or created externally, so be careful.** If you have records that are managed manually, via Terraform, [Pulumi](https://www.pulumi.com/), scripts, etc. **that are not running continuously** you may have to re-create them. If you have some other automated (and continuous) way of creating your DNS records, the risk of losing them is less, but be aware that they'll keep overwriting each other. This includes records managed by this same controller! I.e. if you have the same `*/cloudflare-record` annotation in more than one controller, you'll have a continuous race condition.
+**This means that the controller may permanently overwrite records managed or created externally, so be careful.** If you have records that are managed manually, via Terraform, [Pulumi](https://www.pulumi.com/), scripts, etc. **that are not running continuously** you may have to re-create them. If you have some other automated (and continuous) way of creating your DNS records, the risk of losing them is less, but be aware that they'll keep overwriting each other. This includes records managed by this same controller! I.e. if you have the same `cloudflare.patoarvizu.dev/cloudflare-record` annotation in more than one controller, you'll have a continuous race condition.
 
 ### Only `Ingress`es are supported for now
 
