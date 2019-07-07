@@ -14,6 +14,7 @@
         - [AWS authentication](#aws-authentication)
     - [Deploying the controller](#deploying-the-controller)
     - [Logging](#logging)
+    - [Command line parameters](#command-line-parameters)
     - [Important notes about this project](#important-notes-about-this-project)
         - [The controller doesn't handle deletions](#the-controller-doesnt-handle-deletions)
         - [Only `Ingress`es are supported for now](#only-ingresses-are-supported-for-now)
@@ -99,6 +100,19 @@ Optionally, if the controller is already running on an environment where it can 
 ## Logging
 
 The controller will log all its output to `stdout`. Additionally, it'll create `Events` that you can see using `kubectl describe ingress`. The controller will emit an event of type `Normal` and reason `Synced` when it successfully processed and created all DNS records, or if there's at least one failure, it'll publish an event of type `Warninr` with reason `Error`.
+
+## Command line parameters
+
+
+Parameter | Description | Default value
+----------|-------------|--------------
+`-kubeconfig` | Path to a kubeconfig file. |
+`-master` | The address of the Kubernetes API server. Overrides any value in kubeconfig. |
+`-annotation-prefix` | The prefix to be used for discovery of managed ingresses. | `cloudflare.patoarvizu.dev`
+`-hosted-zone-id` | The id of the Route53 hosted zone to be managed. |
+`-cloudflare-zone-name` | The name of the Cloudflare zone to be managed. |
+`-enable-additional-hosts-annotations` | Enable flag that allows creating additional records for heach 'Host' in the ingress rules. | `false`
+`-frequency` | The frequency at which the controller runs, in seconds. | `30`
 
 ## Important notes about this project
 
