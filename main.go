@@ -21,6 +21,7 @@ var (
 	hostedZoneId                    string
 	cloudflareZoneName              string
 	enableAdditionalHostsAnnotation bool
+	frequencyInSeconds              int
 )
 
 func setupSignalHandler() (stopCh <-chan struct{}) {
@@ -53,7 +54,7 @@ func main() {
 		klog.Fatalf("Error building kubernetes clientset: %s", err.Error())
 	}
 
-	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
+	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*time.Duration(frequencyInSeconds))
 
 	controller := NewController(
 		kubeClient,
@@ -72,10 +73,11 @@ func main() {
 }
 
 func init() {
-	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig.")
+	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig file.")
 	flag.StringVar(&masterURL, "master", "", "The address of the Kubernetes API server. Overrides any value in kubeconfig.")
 	flag.StringVar(&annotationPrefix, "annotation-prefix", "cloudflare.patoarvizu.dev", "The prefix to be used for discovery of managed ingresses.")
 	flag.StringVar(&hostedZoneId, "hosted-zone-id", "", "The id of the Route53 hosted zone to be managed.")
 	flag.StringVar(&cloudflareZoneName, "cloudflare-zone-name", "", "The name of the Cloudflare zone to be managed.")
 	flag.BoolVar(&enableAdditionalHostsAnnotation, "enable-additional-hosts-annotations", false, "Enable flag that allows creating additional records for heach 'Host' in the ingress rules.")
+	flag.IntVar(&frequencyInSeconds, "frequency", 30, "The frequency at which the controller runs, in seconds.")
 }
