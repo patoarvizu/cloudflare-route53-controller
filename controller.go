@@ -175,38 +175,57 @@ func (c *Controller) processIngress(obj interface{}) error {
 				}
 			}
 
-			uniqueHosts := removeDuplicates(records)
-			hostsChanges := []*route53.Change{}
-			for _, record := range uniqueHosts {
-				hostsChanges = append(hostsChanges, &route53.Change{
-					Action: aws.String(route53.ChangeActionUpsert),
-					ResourceRecordSet: &route53.ResourceRecordSet{
-						Name: aws.String(record),
-						ResourceRecords: []*route53.ResourceRecord{
-							&route53.ResourceRecord{
-								Value: aws.String(fmt.Sprintf("%s.cdn.cloudflare.net", record)),
-							},
-						},
-						TTL:  aws.Int64(60),
-						Type: aws.String(route53.RRTypeCname),
-					},
-				})
-			}
-
 			awsSession := session.Must(session.NewSession())
 			r53 := route53.New(awsSession)
-			r53.ChangeResourceRecordSets(&route53.ChangeResourceRecordSetsInput{
-				HostedZoneId: aws.String(hostedZoneId),
-				ChangeBatch: &route53.ChangeBatch{
-					Changes: hostsChanges,
-				},
-			})
-
+			withErrors := false
+			uniqueHosts := removeDuplicates(records)
 			for _, record := range uniqueHosts {
-				cf.CreateDNSRecord(zoneId, cloudflare.DNSRecord{Type: "CNAME", Name: record, Content: d, Proxied: true, TTL: 1})
+				//We do one Route 53 record at a time to minimize the time between corresponding R53 and Cloudflare changes
+				_, err = r53.ChangeResourceRecordSets(&route53.ChangeResourceRecordSetsInput{
+					HostedZoneId: aws.String(hostedZoneId),
+					ChangeBatch: &route53.ChangeBatch{
+						Changes: []*route53.Change{
+							&route53.Change{
+								Action: aws.String(route53.ChangeActionUpsert),
+								ResourceRecordSet: &route53.ResourceRecordSet{
+									Name: aws.String(record),
+									ResourceRecords: []*route53.ResourceRecord{
+										&route53.ResourceRecord{
+											Value: aws.String(fmt.Sprintf("%s.cdn.cloudflare.net", record)),
+										},
+									},
+									TTL:  aws.Int64(60),
+									Type: aws.String(route53.RRTypeCname),
+								},
+							},
+						},
+					},
+				})
+				if err != nil {
+					klog.Errorf("Error: %v", err)
+					c.recorder.Event(ingress, corev1.EventTypeWarning, "Error", fmt.Sprintf("Route53 record (%s) failed to update.", record))
+					withErrors = true
+				}
+
+				r, err := cf.DNSRecords(zoneId, cloudflare.DNSRecord{Name: record, ZoneID: zoneId, Type: "CNAME"})
+				if err != nil {
+					klog.Errorf("Error: %v", err)
+				}
+				if r != nil && len(r) != 0 { // Cloudflare's API doesn't have an 'upsert' operation, so we do this hack.
+					err = cf.UpdateDNSRecord(zoneId, r[0].ID, cloudflare.DNSRecord{Type: "CNAME", Name: record, Content: d, Proxied: true, TTL: 1})
+				} else {
+					_, err = cf.CreateDNSRecord(zoneId, cloudflare.DNSRecord{Type: "CNAME", Name: record, Content: d, Proxied: true, TTL: 1})
+				}
+				if err != nil {
+					klog.Errorf("Error: %v", err)
+					c.recorder.Event(ingress, corev1.EventTypeWarning, "Error", fmt.Sprintf("Cloudflare record (%s) failed to update.", record))
+					withErrors = true
+				}
 			}
 
-			c.recorder.Event(ingress, corev1.EventTypeNormal, "Synced", "Cloudflare and Route53 records have been synced.")
+			if !withErrors {
+				c.recorder.Event(ingress, corev1.EventTypeNormal, "Synced", fmt.Sprintf("Cloudflare and Route53 records for ingress %s have been synced.", key))
+			}
 		}
 	}
 

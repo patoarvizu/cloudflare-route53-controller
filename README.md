@@ -13,6 +13,7 @@
         - [Cloudflare authentication](#cloudflare-authentication)
         - [AWS authentication](#aws-authentication)
     - [Deploying the controller](#deploying-the-controller)
+    - [Logging](#logging)
     - [Important notes about this project](#important-notes-about-this-project)
         - [The controller doesn't handle deletions](#the-controller-doesnt-handle-deletions)
         - [Only `Ingress`es are supported for now](#only-ingresses-are-supported-for-now)
@@ -94,6 +95,10 @@ The controller uses the default [credential precedence order](https://docs.aws.a
 A [Helm](https://helm.sh/) chart is provided in the `helm/cloudflare-route53-controller` directory. This chart depends on two manifests not included in it: a `Secret` (called `cloudflare-route53-controller-secrets` by default) where the `Deployment` can find the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `CLOUDFLARE_TOKEN` secrets, as well as a `ConfigMap` (called `cloudflare-route53-controller-config` by default), where the `Deployment` can find the `CLOUDFLARE_EMAIL` variable.
 
 Optionally, if the controller is already running on an environment where it can auto-discover its AWS access keys, e.g. on a node with an instance role that would provide the credentials via the local metadata endpoint, or injected dynamically via [vaultenv](https://github.com/channable/vaultenv), you can set the `aws.withCredentials` value to `false`, and Helm won't render the corresponding environment variables.
+
+## Logging
+
+The controller will log all its output to `stdout`. Additionally, it'll create `Events` that you can see using `kubectl describe ingress`. The controller will emit an event of type `Normal` and reason `Synced` when it successfully processed and created all DNS records, or if there's at least one failure, it'll publish an event of type `Warninr` with reason `Error`.
 
 ## Important notes about this project
 
