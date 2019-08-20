@@ -11,8 +11,16 @@ jobs:
       - run:
           name: Build and push image
           command: |
+            curl -L https://github.com/theupdateframework/notary/releases/download/v0.6.1/notary-Linux-amd64 -o notary
+            chmod +x notary
+            mv notary /usr/local/bin
+            echo $ENCODED_NOTARY_ROLE_KEY | base64 -d > cloudflare-route53-operator-circleci.key
+            export NOTARY_DELEGATION_PASSPHRASE=$NOTARY_ROLE_PASSPHRASE
+            notary -s https://notary.docker.io -d ~/.docker/trust key import cloudflare-route53-operator-circleci.key --role cloudflare-route53-operator-circleci
+            export DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE=$NOTARY_DELEGATION_PASSPHRASE
             echo $DOCKER_HUB_KEY | docker login -u $DOCKER_HUB_USER --password-stdin
             docker build -f docker/Dockerfile -t patoarvizu/cloudflare-route53-controller:$CIRCLE_SHA1 .
+            export DOCKER_CONTENT_TRUST=1
             VERSION=${CIRCLE_TAG:-latest}
             docker tag patoarvizu/cloudflare-route53-controller:$CIRCLE_SHA1 patoarvizu/cloudflare-route53-controller:latest
             docker tag patoarvizu/cloudflare-route53-controller:$CIRCLE_SHA1 patoarvizu/cloudflare-route53-controller:$VERSION
