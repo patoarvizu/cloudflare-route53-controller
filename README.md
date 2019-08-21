@@ -15,6 +15,9 @@
     - [Deploying the controller](#deploying-the-controller)
     - [Logging](#logging)
     - [Command line parameters](#command-line-parameters)
+    - [For security nerds](#for-security-nerds)
+        - [Docker images are signed and published to Docker Hub's Notary server](#docker-images-are-signed-and-published-to-docker-hubs-notary-server)
+        - [Docker images are labeled with Git and GPG metadata](#docker-images-are-labeled-with-git-and-gpg-metadata)
     - [Important notes about this project](#important-notes-about-this-project)
         - [The controller doesn't handle deletions](#the-controller-doesnt-handle-deletions)
         - [Only `Ingress`es are supported for now](#only-ingresses-are-supported-for-now)
@@ -113,6 +116,34 @@ Parameter | Description | Default value
 `-cloudflare-zone-name` | The name of the Cloudflare zone to be managed. |
 `-enable-additional-hosts-annotations` | Enable flag that allows creating additional records for heach 'Host' in the ingress rules. | `false`
 `-frequency` | The frequency at which the controller runs, in seconds. | `30`
+
+## For security nerds
+
+### Docker images are signed and published to Docker Hub's Notary server
+
+The [Notary](https://github.com/theupdateframework/notary) project is a CNCF incubating project that aims to provide trust and security to software distribution. Docker Hub runs a Notary server at https://notary.docker.io for the repositories it hosts.
+
+[Docker Content Trust](https://docs.docker.com/engine/security/trust/content_trust/) is the mechanism used to verify digital signatures and enforce security by adding a validating layer.
+
+You can inspect the signed tags for this project by doing `docker trust inspect --pretty docker.io/patoarvizu/cloudflare-route53-controller`, or (if you already have `notary` installed) `notary -d ~/.docker/trust/ -s https://notary.docker.io list docker.io/patoarvizu/cloudflare-route53-controller`.
+
+If you run `docker pull` with `DOCKER_CONTENT_TRUST=1`, the Docker client will only pull images that come from registries that have a Notary server attached (like Docker Hub).
+
+### Docker images are labeled with Git and GPG metadata
+
+In addition to the digital validation done by Docker on the image itself, you can do your own human validation by making sure the image's content matches the Git commit information (including tags if there are any) and that the GPG signature on the commit matches the key on the commit on github.com.
+
+For example, if you run `docker pull patoarvizu/cloudflare-route53-controller:ecfcf2352f12101d9b2608e53f459149914d8c16` to pull the image tagged with that commit id, then run `docker inspect patoarvizu/cloudflare-route53-controller:ecfcf2352f12101d9b2608e53f459149914d8c16 | jq -r '.[0].ContainerConfig.Labels'` (assuming you have [jq](https://stedolan.github.io/jq/) installed) you should see that the `GIT_COMMIT` label matches the tag on the image. Furthermore, if you go to https://github.com/patoarvizu/cloudflare-route53-controller/commit/ecfcf2352f12101d9b2608e53f459149914d8c16 (notice the matching commit id), and click on the **Verified** button, you should be able to confirm that the GPG key ID used to match this commit matches the value of the `SIGNATURE_KEY` label, and that the key belongs to the `AUTHOR_EMAIL` label. When an image belongs to a commit that was tagged, it'll also include a `GIT_TAG` label, to further validate that the image matches the content.
+
+Keep in mind that this isn't tamper-proof. A malicious actor with access to publish images can create one with malicious content but with values for the labels matching those of a valid commit id. However, when combined with Docker Content Trust, the certainty of using a legitimate image is increased because the chances of a bad actor having both the credentials for publishing images, as well as Notary signing credentials are significantly lower and even in that scenario, compromised signing keys can be revoked or rotated.
+
+Here's the list of included Docker labels:
+
+- `AUTHOR_EMAIL`
+- `COMMIT_TIMESTAMP`
+- `GIT_COMMIT`
+- `GIT_TAG`
+- `SIGNATURE_KEY`
 
 ## Important notes about this project
 
