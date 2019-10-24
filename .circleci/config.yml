@@ -11,7 +11,7 @@ jobs:
       - run:
           name: Build and push image
           command: |
-            apk add curl gnupg
+            apk add --update-cache --upgrade curl gnupg
             curl -L https://github.com/theupdateframework/notary/releases/download/v0.6.1/notary-Linux-amd64 -o notary
             chmod +x notary
             mv notary /usr/local/bin
